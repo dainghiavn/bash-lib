@@ -116,8 +116,8 @@ header_info() {
     cat <<EOF
 
   ${BLD}${CY}╔══════════════════════════════════════════════╗${CL}
-  ${BLD}${CY}║${CL}  ${WH}${BLD}${app}${CL}${version:+  ${C_DIM}v${version}${CL}}
-  ${BLD}${CY}║${CL}  ${C_DIM}Proxmox LXC Installer${CL}
+  ${BLD}${CY}║${CL}  ${WH}${BLD}${app}${CL}${version:+  ${C_DIM}${version}${CL}}
+  ${BLD}${CY}║${CL}  ${C_DIM}Installer${CL}
   ${BLD}${CY}╚══════════════════════════════════════════════╝${CL}
 
 EOF
