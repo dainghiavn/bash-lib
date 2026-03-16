@@ -4,7 +4,7 @@
 #
 # Cách dùng trong bất kỳ script nào:
 #
-#   source <(curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/bash-lib/main/lib.sh)
+#   source <(curl -fsSL https://raw.githubusercontent.com/dainghiavn/bash-lib/main/lib.sh)
 #
 # Core tự động load. Gọi thêm nếu cần:
 #
@@ -23,7 +23,7 @@
 readonly _BASHLIB_LOADED=1
 
 # ── Base URL — trỏ về repo của bạn ───────────────────────────────────────────
-readonly BASHLIB_BASE_URL="https://raw.githubusercontent.com/YOUR_USERNAME/bash-lib/main"
+readonly BASHLIB_BASE_URL="https://raw.githubusercontent.com/dainghiavn/bash-lib/main"
 readonly BASHLIB_VERSION="main"
 
 # ── Internal loader ───────────────────────────────────────────────────────────
