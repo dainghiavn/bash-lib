@@ -24,56 +24,53 @@ check_udp_port() {
     local timeout="${2:-3}"
     local var_name="NET_UDP_${port}"
 
-    # Dùng nc (netcat) để test UDP
+    # Strategy: thử nhiều cách, không dùng binary data để tránh null byte warning
+    # Cách 1: nc UDP — gửi empty packet, không đọc response (tránh null byte)
     if command -v nc &>/dev/null; then
-        if echo -n "" | nc -u -w"$timeout" udp.tailscale.com "$port" &>/dev/null; then
+        # timeout để nc không hang, 2>/dev/null suppress mọi warning
+        if timeout "$timeout" sh -c \
+            "echo '' | nc -u -w${timeout} udp.tailscale.com ${port}" \
+            >/dev/null 2>&1; then
             eval "${var_name}=open"
             msg_check "pass" "UDP ${port}" "open → Direct P2P khả dụng"
             return 0
         fi
     fi
 
-    # Fallback: dùng timeout + /dev/udp (bash built-in)
-    if (timeout "$timeout" bash -c \
-        "echo > /dev/udp/udp.tailscale.com/${port}" 2>/dev/null); then
+    # Cách 2: /dev/udp bash builtin — redirect stderr để tránh null byte warning
+    if timeout "$timeout" bash -c \
+        "echo '' > /dev/udp/udp.tailscale.com/${port}" \
+        >/dev/null 2>&1; then
         eval "${var_name}=open"
         msg_check "pass" "UDP ${port}" "open"
         return 0
     fi
 
-    # Thử với STUN server public
-    local stun_result="blocked"
-    if _stun_quick_check "stun.l.google.com" "$port" "$timeout"; then
-        stun_result="open"
-    fi
-
-    eval "${var_name}=${stun_result}"
-
-    if [[ "$stun_result" == "open" ]]; then
-        msg_check "pass" "UDP ${port}" "open (via STUN)"
-        return 0
-    fi
-
+    # UDP bị chặn — không có cách nào gửi được
+    eval "${var_name}=blocked"
     msg_check "fail" "UDP ${port}" "BLOCKED → Tailscale sẽ dùng DERP relay"
     return 1
 }
 
-# Quick STUN check — chỉ xem có reply không, không parse kết quả
+# Quick STUN check — dùng hex string thay binary để tránh null byte warning
 _stun_quick_check() {
     local server="$1" port="$2" timeout="${3:-3}"
 
-    # STUN Binding Request packet (RFC 5389)
-    # Magic cookie: 0x2112A442, Transaction ID: random 12 bytes
-    local stun_request
-    stun_request=$(printf '\x00\x01\x00\x00\x21\x12\xa4\x42'
-                   printf '\xde\xad\xbe\xef\xde\xad\xbe\xef\xde\xad\xbe\xef')
+    if ! command -v nc &>/dev/null; then
+        return 1
+    fi
+
+    # STUN Binding Request dạng hex — không dùng printf binary
+    local stun_hex="000100002112a442deadbeefdeadbeefdeadbeef"
+    local stun_bytes
+    stun_bytes=$(printf '%b' "$(echo "$stun_hex" | sed 's/../\\x&/g')" 2>/dev/null)
 
     local response
-    response=$(echo -ne "$stun_request" \
+    response=$(printf '%s' "$stun_bytes" \
         | timeout "$timeout" nc -u -w"$timeout" "$server" "$port" 2>/dev/null \
-        | xxd 2>/dev/null | head -1)
+        | od -An -tx1 2>/dev/null | tr -d ' \n' || echo "")
 
-    # STUN response bắt đầu bằng 0x0101
+    # STUN success response type = 0101
     [[ "$response" == *"0101"* ]]
 }
 
