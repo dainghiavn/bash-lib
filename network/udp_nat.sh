@@ -90,12 +90,12 @@ detect_nat_type() {
 
     # Query STUN server 1
     local result1
-    result1=$(_stun_query "$stun1" "$timeout")
+    result1=$(_stun_query "$stun1" "$timeout" || echo "")
 
     if [[ -z "$result1" ]]; then
         NET_NAT_TYPE="unknown"
-        msg_check "warn" "NAT type" "Không test được (STUN timeout)"
-        return 1
+        msg_check "warn" "NAT type" "Không test được (STUN timeout) — bỏ qua"
+        return 0   # Không phải lỗi critical — tiếp tục script
     fi
 
     # Parse IP:PORT từ kết quả STUN
@@ -107,13 +107,13 @@ detect_nat_type() {
 
     # Query STUN server 2 (khác server, cùng local port nếu có thể)
     local result2
-    result2=$(_stun_query "$stun2" "$timeout")
+    result2=$(_stun_query "$stun2" "$timeout" || echo "")
 
     if [[ -z "$result2" ]]; then
         # Chỉ có 1 kết quả — không thể phân biệt NAT type
         NET_NAT_TYPE="unknown"
         msg_check "warn" "NAT type" "STUN 2 timeout — không xác định được"
-        return 1
+        return 0   # Không critical
     fi
 
     local ip2 port2

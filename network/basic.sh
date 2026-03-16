@@ -58,16 +58,33 @@ check_https() {
     fi
 
     local http_code
-    http_code=$(curl -fsSL --max-time "$timeout" \
-        -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || echo "000")
+    # Bỏ -f flag để curl không exit non-zero với 4xx/5xx
+    # Dùng --write-out thay vì -w để tránh format string issue
+    http_code=$(curl -sL --max-time "$timeout" \
+        --output /dev/null \
+        --write-out "%{http_code}" \
+        "$url" 2>/dev/null)
 
-    if [[ "$http_code" =~ ^2[0-9]{2}$ ]]; then
-        msg_check "pass" "HTTPS :443" "${url%%/health*} → HTTP ${http_code}"
+    # Trim whitespace/null bytes
+    http_code="${http_code//[^0-9]/}"
+
+    local host_only="${url#https://}"
+    host_only="${host_only%%/*}"
+
+    # 2xx = OK, 3xx = redirect (vẫn reach được), 4xx = server có phản hồi
+    # Chỉ fail khi 000 (không kết nối được) hoặc 5xx (server lỗi)
+    if [[ "$http_code" =~ ^[234][0-9]{2}$ ]]; then
+        msg_check "pass" "HTTPS :443" "${host_only} → HTTP ${http_code}"
         return 0
     fi
 
-    msg_check "fail" "HTTPS :443" "${url} → HTTP ${http_code}"
-    return 1
+    if [[ "$http_code" == "000" ]] || [[ -z "$http_code" ]]; then
+        msg_check "fail" "HTTPS :443" "${host_only} → Không kết nối được (timeout/blocked)"
+        return 1
+    fi
+
+    msg_check "warn" "HTTPS :443" "${host_only} → HTTP ${http_code}"
+    return 0
 }
 
 # ── Default gateway ───────────────────────────────────────────────────────────
@@ -159,21 +176,34 @@ detect_vlan() {
     local bridges=()
 
     # Tìm VLAN interfaces (vmbr0.100, eth0.10, etc.)
-    while IFS= read -r line; do
-        local iface
-        iface=$(echo "$line" | awk '{print $2}' | tr -d ':')
-        vlans+=("$iface")
-    done < <(ip link show 2>/dev/null | grep -E "^\S+.*\.(eth|vmbr|bond|ens)")
+    # grep có thể return 1 nếu không match — dùng || true để tránh set -e exit
+    local vlan_lines
+    vlan_lines=$(ip link show 2>/dev/null \
+        | grep -E "^\S+.*\.(eth|vmbr|bond|ens)" || true)
+
+    if [[ -n "$vlan_lines" ]]; then
+        while IFS= read -r line; do
+            local iface
+            iface=$(echo "$line" | awk '{print $2}' | tr -d ':')
+            [[ -n "$iface" ]] && vlans+=("$iface")
+        done <<< "$vlan_lines"
+    fi
 
     # Tìm bridge interfaces
-    while IFS= read -r line; do
-        local iface
-        iface=$(echo "$line" | awk '{print $2}' | tr -d ':')
-        bridges+=("$iface")
-    done < <(ip link show type bridge 2>/dev/null | grep "^[0-9]")
+    local bridge_lines
+    bridge_lines=$(ip link show type bridge 2>/dev/null \
+        | grep "^[0-9]" || true)
 
-    NET_VLANS=("${vlans[@]}")
-    NET_BRIDGES=("${bridges[@]}")
+    if [[ -n "$bridge_lines" ]]; then
+        while IFS= read -r line; do
+            local iface
+            iface=$(echo "$line" | awk '{print $2}' | tr -d ':')
+            [[ -n "$iface" ]] && bridges+=("$iface")
+        done <<< "$bridge_lines"
+    fi
+
+    NET_VLANS=("${vlans[@]:-}")
+    NET_BRIDGES=("${bridges[@]:-}")
 
     if [[ ${#vlans[@]} -gt 0 ]]; then
         msg_check "info" "VLAN detected" "${vlans[*]}"
@@ -183,7 +213,8 @@ detect_vlan() {
         msg_check "info" "Bridges" "${bridges[*]}"
     fi
 
-    [[ ${#vlans[@]} -gt 0 ]] || [[ ${#bridges[@]} -gt 0 ]]
+    # Trả về 0 luôn — không để set -e bắt
+    return 0
 }
 
 # ── Local IP / interface ──────────────────────────────────────────────────────
