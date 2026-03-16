@@ -10,16 +10,18 @@
 readonly _BASHLIB_UI_LOADED=1
 
 # ── Color codes ───────────────────────────────────────────────────────────────
-if [[ -t 1 ]] && command -v tput &>/dev/null; then
-    readonly CL="\e[0m"       # reset
-    readonly RD="\e[31m"      # red
-    readonly GN="\e[32m"      # green
-    readonly YW="\e[33m"      # yellow
-    readonly BL="\e[34m"      # blue
-    readonly CY="\e[36m"      # cyan
-    readonly WH="\e[97m"      # white
-    readonly DM="\e[2m"       # dim
-    readonly BLD="\e[1m"      # bold
+# Dùng $'\e[' thay vì "\e[" để escape character được interpret đúng
+# "\e[" chỉ là literal string — $'\e[' mới là ESC character thực sự
+if [[ -t 1 ]] || [[ "${FORCE_COLOR:-0}" == "1" ]]; then
+    readonly CL=$'\e[0m'      # reset
+    readonly RD=$'\e[31m'     # red
+    readonly GN=$'\e[32m'     # green
+    readonly YW=$'\e[33m'     # yellow
+    readonly BL=$'\e[34m'     # blue
+    readonly CY=$'\e[36m'     # cyan
+    readonly WH=$'\e[97m'     # white
+    readonly DM=$'\e[2m'      # dim
+    readonly BLD=$'\e[1m'     # bold
 
     # Semantic colors
     readonly C_OK="${GN}"
