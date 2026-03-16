@@ -153,23 +153,19 @@ _stun_query() {
     fi
 
     # Build STUN Binding Request
-    # Type=0x0001, Length=0x0000
-    # Magic Cookie=0x2112A442
-    # Transaction ID: 12 random bytes
-    local txn_id=""
-    for _ in {1..12}; do
-        txn_id+=$(printf '\\x%02x' $(( RANDOM % 256 )))
-    done
+    # Type=0x0001, Length=0x0000, Magic Cookie=0x2112A442
+    # Transaction ID: 12 bytes cố định (không dùng RANDOM để tránh null byte)
+    local stun_req_hex="000100002112a442deadbeefdeadbeefdeadbeef"
 
-    local stun_req
-    stun_req=$(printf '\x00\x01\x00\x00\x21\x12\xa4\x42')
-    stun_req+=$(echo -ne "$txn_id")
-
-    # Gửi request và đọc response (binary)
+    # Gửi request và đọc response — dùng od để tránh null byte issue
+    # 2>/dev/null để suppress warning "ignored null byte in input"
     local raw_response
-    raw_response=$(echo -ne "$stun_req" \
+    raw_response=$(printf '%b' "$(echo "$stun_req_hex" \
+            | sed 's/../\\x&/g')" 2>/dev/null \
         | timeout "$timeout" nc -u -w"$timeout" "$server" "$port" 2>/dev/null \
-        | od -An -tx1 | tr -d ' \n' 2>/dev/null || echo "")
+        | od -An -tx1 2>/dev/null \
+        | tr -d ' \n' \
+        || echo "")
 
     if [[ -z "$raw_response" ]] || [[ ${#raw_response} -lt 40 ]]; then
         echo ""
